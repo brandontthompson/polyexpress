@@ -1,12 +1,13 @@
 import express, { Router } from "express";
-import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions, HttpListener } from "../index";
-import { Server as http } from "http";
-import { Server as https } from "https";
+import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions, HttpListener } from "../polyservice";
+import { createServer as http } from "http";
+import { createServer as https } from "https";
 
 export default express;
 const app = express();
 const router = Router();
 const middlewares:middleware[] = [];
+let middlewareFunctions:string[] = [];
 const API_BASE:string = process.env.API_BASE || "";
 
 export enum requestType {
@@ -21,13 +22,22 @@ export enum requestType {
 	TRACE 	= "trace"
 }
 
-export enum requestMethod {
-	JSON,
-	XML,
-	FILE,
-	TEXT,
-	QUERY,
-	PARAM
+export enum requestMethod{
+	JSON  = "JSON",
+	XML   = "XML",
+	FILE  = "FILE",
+	TEXT  = "TEXT",
+	QUERY ="QUERY",
+	PARAM = "PARAM",
+}
+
+export const request = {
+	JSON  : {where: "body", requires:["jsonParser"]},
+	XML   : {where: "body", requires:[]},
+	FILE  : {where: "files", requires:[]},
+	TEXT  : {where: "body", requires:[]},
+	QUERY : {where: "query", requires:["urlencodedParser"]},
+	PARAM : {where: "params", requires:[]},
 }
 
 export interface webMethod extends method {
@@ -51,124 +61,82 @@ export const web:controller & {apibase:string|undefined} = {
     apibase: API_BASE
 };
 
-// Pass options throught init so we can use them in controllers later :D 
-function init(options:{ httplistener:http|https|HttpListener, httpoptions?:any, httpserverout?:any, apibase?:string } & controllerOptions) {
+function init(options:{ httplistener:any, httpoptions?:any, httpserverout?:any, apibase?:string } & controllerOptions) {
 	if(options.apibase) web.apibase = options.apibase;
 	for (let index = 0; index < middlewares.length; index++) {
-	    const middleware:middleware | any = middlewares[index];
-		console.log(middleware.callback.name)
-	    middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, middleware.callback) : app.use(middleware.callback);   
+		const middleware:middleware | any = middlewares[index];
+		middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, middleware.callback) : app.use(middleware.callback);   
 	}
 	app.use("/"+web.apibase,router);
-	if(!options.httplistener) throw new Error("HttpListener option not passed, express listen failed to start");
-	options.httpserverout = options.httplistener.createServer(app, options.httpoptions);
+	if(!options.httplistener) throw Error("HttpListener option not passed, express listen failed to start");
+	options.httpserverout = options.httplistener(app, options.httpoptions);
 }
 
 function bind(service:webService) {
-
-    // setup the context so we can use it later
-	app.use((req:any, res:any, next:Function) => {
-	    if(!res.locals.context) res.locals.context = {}; 
-	    return next();
-	});
-
 	if(!("request" in (service.method[0] as webMethod))){ console.log("WARNING: FAILED TO BIND SERVICE: " + service.name); return; }
-    service.method.forEach((method:webMethod, index:number)=> {
-        const url = buildURL(service, method);
-//        if(method.protect != undefined && method.protect != null){
-//            const protection:iauth = method.protect;
-//
-//            router.use(url, (async(req, res, next) => { 
-//                // @TODO: generalize this so we dont leave it up to the interfaces to define the bitshifting for the services
-//                // const protectContext = await protect(protection, { service: { name: service.name, id:1 << index, },  body:req.body, headers:req.headers, param:req.params, query:req.query })
-//                const protectContext = await protect(protection, { service: { name: service.name, id:1 << index },  req })
-//
-//                if(!protectContext)
-//                    return res.status(401).end();
-//
-//                res.locals.context.protect = protectContext
-//                return next();
-//         }));
-//        }
-	router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
-    });
+	service.method.forEach((method:webMethod, index:number)=> {
+		// find all of our url params and push them to and array with an optional flag
+		// then ensure only the LAST param is optional or stuff will break
+		// after build urls based off of param length, do more than once if we have an optional param
+		const urlargs:{key:string, optional?:boolean}[] = [];
+		Object.keys(method?.arguments||{}).forEach((key:string) => {
+			if(!method.arguments) return;
+			const argument:webarg = method?.arguments[key];
+			if(argument.requestMethod === requestMethod.PARAM) urlargs.push({key, optional:(!argument.type || argument.type.includes("undefined") || argument.type.includes("null"))})
+		});
+
+		urlargs.forEach((arg:any, index:number) => {
+			if(arg.optional && index+1 < urlargs.length) throw Error(`ERROR: ${service.name} : ${method.name}, ${arg.key} param argument must be last url parameter to be typeof undefined or null`); 
+		});
+		
+		for(let i = 0, len = [(urlargs?.find(({optional}) => optional))].length + 1; i < len; i++){
+			router[method?.request](buildURL(service, method.name, urlargs.slice(0,(!i) ? -1 : undefined)), function(req:any, res:any){resolver(req, res, method)});
+		}
+
+
+    	});
 }
 
 
 function middleware(middleware:middleware){
-    middlewares.push(middleware)
+	middlewares.push(middleware);
+	middlewareFunctions.push(middleware.callback.name);
 }
 
 /**
  * @private
  * builds the URL for each service's method
  */
-function buildURL(service:service, method:webMethod):string {
-    let url = "/" +service.name+"/" + ((service.version) ? service.version + "/" : "") + method.name;
+function buildURL(service:service, methodname:string, urlarguments:{key:string, optional?:boolean}[]):string {
+	let url = "/" +service.name+"/" + ((service.version) ? service.version + "/" : "") + methodname;
+	urlarguments.forEach(({key}) => {
+		url+="/:"+key;
+	})
 
-//    if((method.protect && method.protect.type === authType.PARAM )|| (method.protect && method.protect.type === authType.PARAM_AUTHORIZATION )|| (method.protect && method.protect.type === authType.PARAM_BODY))
-//        url +=  "/:"+method.protect.key;
-//
-	if(method.arguments) 
-    Object.keys(method.arguments).forEach((key:string) => {
-	    // need to add another check because typescript strict mode sucks and doesnt realise this cant be undefined if we checked already
-	    if(!method.arguments) return;
-	    const argument:webarg = method?.arguments[key];
-	    if(argument.requestMethod === requestMethod.PARAM)
-		    url += "/:"+key
-    });
-
-    return url;
+	return url;
 }
 
 async function resolver(req:any, res:any, method:webMethod) {   
 
-//	const param:any[] = [];
 	const param:any = {};
 	for(const argument in method.arguments){
+		
 		const target:webarg = method.arguments[argument];
-		if(target.requestMethod === requestMethod.PARAM) 
-		    //param.push(req.params[argument]);	
-		    param[argument] = req.params[argument];
-		else if(target.requestMethod === requestMethod.JSON || target.requestMethod === requestMethod.XML)
-		    //param.push(req.body[argument]);	
-		    param[argument] = req.body[argument];
-		else if (target.requestMethod === requestMethod.QUERY)
-		    //param.push(req.query[argument]);
-		    param[argument] = req.query[argument];
-		else if (target.requestMethod === requestMethod.TEXT){}
-		else if (target.requestMethod === requestMethod.FILE)
-		    //param.push(req.file[argument]);
-		    param[argument] = req.file[argument];
-		// @TODO: add the rest of the format options
-		//const test = ensure(target, param[param.length - 1], argument);
+		const requestmethod:{where:string, requires: string[]} = request[target.requestMethod];
+
+		//ensure all middlewares are loaded that are required for some request types
+		if(!middlewareFunctions.filter((m) => requestmethod.requires.every((item:any) => m.includes(item))).length) console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
+		param[argument] = req[requestmethod.where][argument];
+
 		const test = ensure(target, param[argument], argument);
 		if(!test || (typeof test !== "boolean" && ('blame' in (test as ensurefail)))) return res.status(400).send(test.toString());
 		    
 	}
   	
-	const ret:result|ensurefail = invoke(method, {...param, context:res.locals.context});
-	if(!ret || (typeof ret !== "boolean" && ('blame' in (ret as ensurefail)))) { console.log(ret.toString()); return res.status(400).end();}
-//    const result:result = method.callback(...param, res.locals.context);
-//
-//    if(!result) res.status(500).end();
-//
-//    if(res.locals.context.store)
-//        for (let index = 0; index < Object.entries(res.locals.context.store).length; index++) {
-//            const element = Object.entries(res.locals.context.store)[index];
-//            res.cookie(element[0], element[1], res.locals.context?.storeopts);           
-//        }
-//    res.locals.context = null;    
-//
-//    // @TODO: add support for redirecting and making requests
-//    if(result.redirect) return res.redirect(result.code || 302, result.redirect);
-//    //@TODO: rework for multiple types, use enum not strings
-//    res.type(result.type || "application/json");
-//    // if(result.type !== undefined) res.type(result.type || "application/json");
-//
-//    if(result.error)
-//        return res.status(result.code).send(result);
-//
-    //return res.status(result.code).send((result.type !== undefined) ? result.message : JSON.stringify(result));
-    return res.status((ret as result).code).send(JSON.stringify(ret));
+	invoke(method, {...param, context:res.locals.context})
+		.then((resolve:result|ensurefail)=>{
+			if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { console.log(resolve.toString()); return res.status(400).end();}
+			return res.status((resolve as result).code).send(JSON.stringify(resolve));
+		
+		}).catch((e:any) => {console.log(e); res.status(500).end()});
 }
