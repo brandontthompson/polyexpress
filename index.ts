@@ -27,7 +27,7 @@ export enum requestMethod{
 	XML   = "XML",
 	FILE  = "FILE",
 	TEXT  = "TEXT",
-	QUERY ="QUERY",
+	QUERY = "QUERY",
 	PARAM = "PARAM",
 }
 
@@ -42,11 +42,15 @@ export const request = {
 
 export interface webMethod extends method {
 	request:requestType;
-	arguments?:{[name:string]:webarg}
+	arguments?:{[name:string]:webarg};
+}
+
+export interface webMiddleware extends middleware{
+	requestMethod?:requestMethod;
 }
 
 export interface webService extends service {
-	method: webMethod[]
+	method: webMethod[];
 }
 
 export type webarg = polyarg & {
@@ -79,6 +83,13 @@ function bind(service:webService) {
 		// then ensure only the LAST param is optional or stuff will break
 		// after build urls based off of param length, do more than once if we have an optional param
 		const urlargs:{key:string, optional?:boolean}[] = [];
+		
+		if(method.middleware && !Array.isArray(method.middlware)) method.middleware = [method.middleware];
+	
+		method.middleware.forEach((middleware:webMiddleware, index:number) => {
+			if(middleware.requestMethod && middleware.requestMethod === requestMethod.PARAM) urlargs.push({key:"middleware"+index, optional:false});
+		})
+
 		Object.keys(method?.arguments||{}).forEach((key:string) => {
 			if(!method.arguments) return;
 			const argument:webarg = method?.arguments[key];
@@ -90,7 +101,11 @@ function bind(service:webService) {
 		});
 		
 		for(let i = 0, len = [(urlargs?.find(({optional}) => optional))].length + 1; i < len; i++){
-			router[method?.request](buildURL(service, method.name, urlargs.slice(0,(!i) ? -1 : undefined)), function(req:any, res:any){resolver(req, res, method)});
+			const url = buildURL(service, method.name, urlargs.slice(0,(!i) ? -1 : undefined));
+			method.middleware.forEach((middleware:webMiddleware) ==> {
+				app.use(url, middleware.callback);
+			})
+			router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
 		}
 
 
