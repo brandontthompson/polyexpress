@@ -95,10 +95,18 @@ function bind(service) {
         return;
     }
     service.method.forEach((method, index) => {
+        var _a, _b;
         // find all of our url params and push them to and array with an optional flag
         // then ensure only the LAST param is optional or stuff will break
         // after build urls based off of param length, do more than once if we have an optional param
         const urlargs = [];
+        if (method.middleware && !Array.isArray(method.middleware))
+            method.middleware = [method.middleware];
+        if (method.middleware)
+            (_a = method.middleware) === null || _a === void 0 ? void 0 : _a.forEach((middleware, index) => {
+                if (middleware.requestMethod && middleware.requestMethod === requestMethod.PARAM)
+                    urlargs.push({ key: "middleware" + index, optional: false });
+            });
         Object.keys((method === null || method === void 0 ? void 0 : method.arguments) || {}).forEach((key) => {
             if (!method.arguments)
                 return;
@@ -111,7 +119,12 @@ function bind(service) {
                 throw Error(`ERROR: ${service.name} : ${method.name}, ${arg.key} param argument must be last url parameter to be typeof undefined or null`);
         });
         for (let i = 0, len = [(urlargs === null || urlargs === void 0 ? void 0 : urlargs.find(({ optional }) => optional))].length + 1; i < len; i++) {
-            router[method === null || method === void 0 ? void 0 : method.request](buildURL(service, method.name, urlargs.slice(0, (!i) ? -1 : undefined)), function (req, res) { resolver(req, res, method); });
+            const url = buildURL(service, method.name, urlargs.slice(0, (!i) ? -1 : undefined));
+            if (method.middleware)
+                (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((middleware) => {
+                    //app.use(url, middleware.callback);
+                });
+            router[method === null || method === void 0 ? void 0 : method.request](url, function (req, res) { resolver(req, res, method); });
         }
     });
 }

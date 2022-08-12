@@ -43,6 +43,7 @@ export const request = {
 export interface webMethod extends method {
 	request:requestType;
 	arguments?:{[name:string]:webarg};
+	middleware?:webMiddleware|webMiddleware[];
 }
 
 export interface webMiddleware extends middleware{
@@ -84,9 +85,10 @@ function bind(service:webService) {
 		// after build urls based off of param length, do more than once if we have an optional param
 		const urlargs:{key:string, optional?:boolean}[] = [];
 		
-		if(method.middleware && !Array.isArray(method.middlware)) method.middleware = [method.middleware];
+		if(method.middleware && !Array.isArray(method.middleware)) method.middleware = [method.middleware];
 	
-		method.middleware.forEach((middleware:webMiddleware, index:number) => {
+		if(method.middleware)
+		method.middleware?.forEach((middleware:webMiddleware, index:number) => {
 			if(middleware.requestMethod && middleware.requestMethod === requestMethod.PARAM) urlargs.push({key:"middleware"+index, optional:false});
 		})
 
@@ -102,8 +104,9 @@ function bind(service:webService) {
 		
 		for(let i = 0, len = [(urlargs?.find(({optional}) => optional))].length + 1; i < len; i++){
 			const url = buildURL(service, method.name, urlargs.slice(0,(!i) ? -1 : undefined));
-			method.middleware.forEach((middleware:webMiddleware) ==> {
-				app.use(url, middleware.callback);
+			if(method.middleware)
+			method.middleware?.forEach((middleware:webMiddleware) => {
+				app.use(url, function(req:any, res:any, next:Function){ middleware.callback(req, res, next, {  }); });
 			})
 			router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
 		}
