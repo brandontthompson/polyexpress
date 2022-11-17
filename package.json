@@ -1,6 +1,6 @@
 {
   "name": "polyexpress",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "expressjs wrapper for the polyservice framework",
   "main": "index.js",
   "scripts": {
