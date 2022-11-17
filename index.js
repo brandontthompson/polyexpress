@@ -34,7 +34,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.web = exports.request = exports.requestMethod = exports.requestType = void 0;
 const express_1 = __importStar(require("express"));
-const polyservice_1 = require("../polyservice");
+const polyservice_1 = require("polyservice");
 exports.default = express_1.default;
 const app = (0, express_1.default)();
 const router = (0, express_1.Router)();
@@ -122,7 +122,7 @@ function bind(service) {
             const url = buildURL(service, method.name, urlargs.slice(0, (!i) ? -1 : undefined));
             if (method.middleware)
                 (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((middleware) => {
-                    //app.use(url, middleware.callback);
+                    app.use(url, function (req, res, next) { middleware.callback(req, res, next, {}); });
                 });
             router[method === null || method === void 0 ? void 0 : method.request](url, function (req, res) { resolver(req, res, method); });
         }

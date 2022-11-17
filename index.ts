@@ -1,5 +1,5 @@
 import express, { Router } from "express";
-import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions, HttpListener } from "../polyservice";
+import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions, HttpListener } from "polyservice";
 import { createServer as http } from "http";
 import { createServer as https } from "https";
 
