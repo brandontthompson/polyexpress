@@ -150,9 +150,10 @@ function resolver(req, res, method) {
             const target = method.arguments[argument];
             const requestmethod = exports.request[target.requestMethod];
             //ensure all middlewares are loaded that are required for some request types
-            if (!middlewareFunctions.filter((m) => requestmethod.requires.every((item) => m.includes(item))).length)
+            if (requestmethod.requires.filter((m) => middlewareFunctions.every((item) => !m.includes(item))).length)
                 console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
-            param[argument] = req[requestmethod.where][argument];
+            req["polyexpressErrorState"] = {};
+            param[argument] = (req[requestmethod.where] || req["polyexpressErrorState"])[argument];
             const test = (0, polyservice_1.ensure)(target, param[argument], argument);
             if (!test || (typeof test !== "boolean" && ('blame' in test)))
                 return res.status(400).send(test.toString());
