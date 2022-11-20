@@ -6,6 +6,13 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "files":[
+	  "index.ts",
+	  "index.js",
+	  "package.json",
+	  "package-lock.json",
+	  "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/brandontthompson/polyexpress.git"
@@ -18,7 +25,8 @@
   "homepage": "https://github.com/brandontthompson/polyexpress#readme",
   "dependencies": {
     "@types/express": "^4.17.14",
-    "express": "^4.18.1",
-    "polyservice": "^1.0.2"
-  }
+    "express": "^4.18.2",
+    "polyservice": "^1.0.7"
+  },
+  "keywords": []
 }

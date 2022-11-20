@@ -1,5 +1,5 @@
 import express, { Router } from "express";
-import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions, HttpListener } from "polyservice";
+import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions } from "polyservice";
 import { createServer as http } from "http";
 import { createServer as https } from "https";
 
@@ -143,7 +143,9 @@ async function resolver(req:any, res:any, method:webMethod) {
 		const requestmethod:{where:string, requires: string[]} = request[target.requestMethod];
 
 		//ensure all middlewares are loaded that are required for some request types
-		if(requestmethod.requires.filter((m) => middlewareFunctions.every((item:any) => !m.includes(item))).length) console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
+		if(requestmethod.requires.filter((m) => middlewareFunctions.every((item:any) => !m.includes(item))).length) 
+			console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
+
 		req["polyexpressErrorState"] = {}
 		param[argument] = (req[requestmethod.where] || req["polyexpressErrorState"])[argument];
 
