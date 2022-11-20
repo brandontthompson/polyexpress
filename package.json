@@ -1,17 +1,17 @@
 {
   "name": "polyexpress",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "expressjs wrapper for the polyservice framework",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "files":[
-	  "index.ts",
-	  "index.js",
-	  "package.json",
-	  "package-lock.json",
-	  "README.md"
+  "files": [
+    "index.ts",
+    "index.js",
+    "package.json",
+    "package-lock.json",
+    "README.md"
   ],
   "repository": {
     "type": "git",
