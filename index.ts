@@ -89,7 +89,8 @@ function bind(service:webService) {
 	
 		if(method.middleware)
 		method.middleware?.forEach((middleware:webMiddleware, index:number) => {
-			if(middleware.requestMethod && middleware.requestMethod === requestMethod.PARAM) urlargs.push({key:"middleware"+index, optional:false});
+			if(!middleware.requestMethod || middleware?.requestMethod !== requestMethod.PARAM) return;
+			urlargs.push({key:"middleware"+index, optional:false});
 		})
 
 		Object.keys(method?.arguments||{}).forEach((key:string) => {
@@ -102,8 +103,9 @@ function bind(service:webService) {
 			if(arg.optional && index+1 < urlargs.length) throw Error(`ERROR: ${service.name} : ${method.name}, ${arg.key} param argument must be last url parameter to be typeof undefined or null`); 
 		});
 		
-		for(let i = 0, len = [(urlargs?.find(({optional}) => optional))].length + 1; i < len; i++){
-			const url = buildURL(service, method.name, urlargs.slice(0,(!i) ? -1 : undefined));
+
+		for(let i = 0, len = ((urlargs?.find(({optional}) => optional)) ? 1 : 0) + 1; i < len; i++){
+			const url = buildURL(service, method.name, urlargs.slice(0,(!i && len > 1) ? -1 : undefined));
 			if(method.middleware)
 			method.middleware?.forEach((middleware:webMiddleware) => {
 				app.use(url, function(req:any, res:any, next:Function){ middleware.callback(req, res, next, {  }); });

@@ -104,8 +104,9 @@ function bind(service) {
             method.middleware = [method.middleware];
         if (method.middleware)
             (_a = method.middleware) === null || _a === void 0 ? void 0 : _a.forEach((middleware, index) => {
-                if (middleware.requestMethod && middleware.requestMethod === requestMethod.PARAM)
-                    urlargs.push({ key: "middleware" + index, optional: false });
+                if (!middleware.requestMethod || (middleware === null || middleware === void 0 ? void 0 : middleware.requestMethod) !== requestMethod.PARAM)
+                    return;
+                urlargs.push({ key: "middleware" + index, optional: false });
             });
         Object.keys((method === null || method === void 0 ? void 0 : method.arguments) || {}).forEach((key) => {
             if (!method.arguments)
@@ -118,8 +119,8 @@ function bind(service) {
             if (arg.optional && index + 1 < urlargs.length)
                 throw Error(`ERROR: ${service.name} : ${method.name}, ${arg.key} param argument must be last url parameter to be typeof undefined or null`);
         });
-        for (let i = 0, len = [(urlargs === null || urlargs === void 0 ? void 0 : urlargs.find(({ optional }) => optional))].length + 1; i < len; i++) {
-            const url = buildURL(service, method.name, urlargs.slice(0, (!i) ? -1 : undefined));
+        for (let i = 0, len = ((urlargs === null || urlargs === void 0 ? void 0 : urlargs.find(({ optional }) => optional)) ? 1 : 0) + 1; i < len; i++) {
+            const url = buildURL(service, method.name, urlargs.slice(0, (!i && len > 1) ? -1 : undefined));
             if (method.middleware)
                 (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((middleware) => {
                     app.use(url, function (req, res, next) { middleware.callback(req, res, next, {}); });
