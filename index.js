@@ -61,6 +61,7 @@ var requestMethod;
     requestMethod["TEXT"] = "TEXT";
     requestMethod["QUERY"] = "QUERY";
     requestMethod["PARAM"] = "PARAM";
+    requestMethod["HEADER"] = "HEADER";
 })(requestMethod = exports.requestMethod || (exports.requestMethod = {}));
 exports.request = {
     JSON: { where: "body", requires: ["jsonParser"] },
@@ -69,6 +70,7 @@ exports.request = {
     TEXT: { where: "body", requires: [] },
     QUERY: { where: "query", requires: ["urlencodedParser"] },
     PARAM: { where: "params", requires: [] },
+    HEADER: { where: "headers", requires: [] },
 };
 exports.web = {
     name: "web",

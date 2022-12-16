@@ -29,6 +29,7 @@ export enum requestMethod{
 	TEXT  = "TEXT",
 	QUERY = "QUERY",
 	PARAM = "PARAM",
+	HEADER= "HEADER",
 }
 
 export const request = {
@@ -38,6 +39,7 @@ export const request = {
 	TEXT  : {where: "body", requires:[]},
 	QUERY : {where: "query", requires:["urlencodedParser"]},
 	PARAM : {where: "params", requires:[]},
+	HEADER: {where: "headers", requires:[]},
 }
 
 export interface webMethod extends method {
