@@ -32,12 +32,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.web = exports.request = exports.requestMethod = exports.requestType = void 0;
+exports.web = exports.request = exports.requestMethod = exports.requestType = exports.router = exports.app = void 0;
 const express_1 = __importStar(require("express"));
-const polyservice_1 = require("polyservice");
+const polyservice_1 = require("../polyservice");
 exports.default = express_1.default;
-const app = (0, express_1.default)();
-const router = (0, express_1.Router)();
+exports.app = (0, express_1.default)();
+exports.router = (0, express_1.Router)();
 const middlewares = [];
 let middlewareFunctions = [];
 const API_BASE = process.env.API_BASE || "";
@@ -84,12 +84,14 @@ function init(options) {
         exports.web.apibase = options.apibase;
     for (let index = 0; index < middlewares.length; index++) {
         const middleware = middlewares[index];
-        middleware.namespace ? app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, middleware.callback) : app.use(middleware.callback);
+        const callback = (middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: function (req, res, next) { webWrapper(req, res, next, middleware); } } : middleware;
+        middleware.namespace ? exports.app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, callback) : exports.app.use(callback.callback);
+        //function(req:any, res:any, next:Function) { invoke(middleware, collectParams(req, res, middleware)).then(() => next()).catch((e:any) => console.log(e)); });
     }
-    app.use("/" + exports.web.apibase, router);
+    exports.app.use("/" + exports.web.apibase, exports.router);
     if (!options.httplistener)
         throw Error("HttpListener option not passed, express listen failed to start");
-    options.httpserverout = options.httplistener(app, options.httpoptions);
+    options.httpserverout = options.httplistener(exports.app, options.httpoptions);
 }
 function bind(service) {
     if (!("request" in service.method[0])) {
@@ -106,9 +108,16 @@ function bind(service) {
             method.middleware = [method.middleware];
         if (method.middleware)
             (_a = method.middleware) === null || _a === void 0 ? void 0 : _a.forEach((middleware, index) => {
-                if (!middleware.requestMethod || (middleware === null || middleware === void 0 ? void 0 : middleware.requestMethod) !== requestMethod.PARAM)
+                if (!middleware.arguments)
                     return;
-                urlargs.push({ key: "middleware" + index, optional: false });
+                Object.keys((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) || {}).forEach((key) => {
+                    // this is needed because of TS being shit but is already ensred by line 97
+                    if (!middleware.arguments)
+                        return;
+                    const argument = middleware === null || middleware === void 0 ? void 0 : middleware.arguments[key];
+                    if (argument.requestMethod === requestMethod.PARAM)
+                        urlargs.push({ key, optional: (!argument.type || argument.type.includes("undefined") || argument.type.includes("null")) });
+                });
             });
         Object.keys((method === null || method === void 0 ? void 0 : method.arguments) || {}).forEach((key) => {
             if (!method.arguments)
@@ -125,9 +134,9 @@ function bind(service) {
             const url = buildURL(service, method.name, urlargs.slice(0, (!i && len > 1) ? -1 : undefined));
             if (method.middleware)
                 (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((middleware) => {
-                    app.use(url, function (req, res, next) { middleware.callback(req, res, next, {}); });
+                    exports.app.use(url, function (req, res, next) { console.log(req.body, "AAAiBBB"); (0, polyservice_1.invoke)(middleware, collectParams(req, res, middleware)); });
                 });
-            router[method === null || method === void 0 ? void 0 : method.request](url, function (req, res) { resolver(req, res, method); });
+            exports.router[method === null || method === void 0 ? void 0 : method.request](url, function (req, res) { resolver(req, res, method); });
         }
     });
 }
@@ -146,25 +155,37 @@ function buildURL(service, methodname, urlarguments) {
     });
     return url;
 }
+function collectParams(req, res, method) {
+    const param = {};
+    for (const argument in method.arguments) {
+        const target = method.arguments[argument];
+        const requestmethod = exports.request[target.requestMethod];
+        //ensure all middlewares are loaded that are required for some request types
+        if (requestmethod.requires.filter((m) => middlewareFunctions.every((item) => !m.includes(item))).length)
+            console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
+        req["polyexpressErrorState"] = {};
+        param[argument] = (req[requestmethod.where] || req["polyexpressErrorState"])[argument];
+        //const test = ensure(target, param[argument], argument);
+        //if(!test || (typeof test !== "boolean" && ('blame' in (test as ensurefail)))) return res.status(400).send(test.toString());
+    }
+    console.log(param);
+    return param;
+}
+function webWrapper(req, res, next, middleware) {
+    (0, polyservice_1.invoke)(middleware, Object.assign(Object.assign({}, (collectParams(req, res, middleware))), { next: next })).then((resolve) => {
+        console.log(resolve);
+        if (resolve && (typeof resolve !== "boolean" && ('blame' in resolve))) {
+            console.log(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
+            return res.status(400).end();
+        }
+    });
+}
 function resolver(req, res, method) {
     return __awaiter(this, void 0, void 0, function* () {
-        const param = {};
-        for (const argument in method.arguments) {
-            const target = method.arguments[argument];
-            const requestmethod = exports.request[target.requestMethod];
-            //ensure all middlewares are loaded that are required for some request types
-            if (requestmethod.requires.filter((m) => middlewareFunctions.every((item) => !m.includes(item))).length)
-                console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
-            req["polyexpressErrorState"] = {};
-            param[argument] = (req[requestmethod.where] || req["polyexpressErrorState"])[argument];
-            const test = (0, polyservice_1.ensure)(target, param[argument], argument);
-            if (!test || (typeof test !== "boolean" && ('blame' in test)))
-                return res.status(400).send(test.toString());
-        }
-        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, param), { context: res.locals.context }))
+        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { context: res.locals.context }))
             .then((resolve) => {
             if (!resolve || (typeof resolve !== "boolean" && ('blame' in resolve))) {
-                console.log(resolve.toString());
+                console.log(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
                 return res.status(400).end();
             }
             return res.status(resolve.code).send(JSON.stringify(resolve));
