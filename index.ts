@@ -162,6 +162,10 @@ function collectParams(req:any, res:any, method:webMethod|webMiddleware){
 		const requestmethod:{where:string, requires: string[]} = request[target.requestMethod];
 
 		//ensure all middlewares are loaded that are required for some request types
+		//this can be done elsewhere so we dont have to run this with EVERY param check.
+		//we can scan all the registered objects on init and then run this loop to check
+		//ideally we would pass this off the the framework so the framework would have the abiliy
+		//to take in an object set of requires for all the service argument types
 		if(requestmethod.requires.filter((m) => middlewareFunctions.every((item:any) => !m.includes(item))).length) 
 			console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
 
