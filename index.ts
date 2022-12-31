@@ -72,9 +72,19 @@ function init(options:{ httplistener:any, httpoptions?:any, httpserverout?:any, 
 	if(options.apibase) web.apibase = options.apibase;
 	for (let index = 0; index < middlewares.length; index++) {
 		const middleware:middleware | any = middlewares[index];
-		const callback = (middleware?.arguments) ? {callback: function(req:any, res:any, next:Function) { webWrapper(req, res, next, middleware) }} : middleware;
-		middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, callback) : app.use(callback.callback);
-			//function(req:any, res:any, next:Function) { invoke(middleware, collectParams(req, res, middleware)).then(() => next()).catch((e:any) => console.log(e)); });
+		const callback = (middleware?.arguments) ? {callback: function(req:any, res:any, next:Function) {
+			invoke(middleware, {...(collectParams(req, res, middleware)), next:next })
+			.then((resolve:ensurefail|any) => {
+			if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { 
+				return res.status(400).send(resolve?.toString());}
+			})
+			.catch((e:any) => {
+				console.log(e);
+				return res.status(500).end();
+			});
+		}} : middleware;
+		middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, callback)
+		       	: app.use(callback.callback);
 	}
 	app.use("/"+web.apibase,router);
 	if(!options.httplistener) throw Error("HttpListener option not passed, express listen failed to start");
@@ -158,26 +168,22 @@ function collectParams(req:any, res:any, method:webMethod|webMiddleware){
 		req["polyexpressErrorState"] = {}
 		param[argument] = (req[requestmethod.where] || req["polyexpressErrorState"])[argument];
 
-		//const test = ensure(target, param[argument], argument);
-		//if(!test || (typeof test !== "boolean" && ('blame' in (test as ensurefail)))) return res.status(400).send(test.toString());
+	//	const test = ensure(target, param[argument], argument);
+	//	if(!test || (typeof test !== "boolean" && ('blame' in (test as ensurefail)))) return test;
 
 	}
-	console.log(param)
 	return param;
 }
 
 function webWrapper(req:any, res:any, next:Function, middleware:webMiddleware){
-	invoke(middleware, {...(collectParams(req, res, middleware)), next:next }).then((resolve:ensurefail|any) => {
-		console.log(resolve)
-		if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { console.log(resolve?.toString()); return res.status(400).end();}
-	});	
+
 }
 
 async function resolver(req:any, res:any, method:webMethod) {   
 
-	invoke(method, {...(collectParams(req, res, method)), context:res.locals.context})
+	invoke(method, {...(collectParams(req,res,method)), context:res.locals.context})
 		.then((resolve:result|ensurefail)=>{
-			if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { console.log(resolve?.toString()); return res.status(400).end();}
+			if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
 			return res.status((resolve as result).code).send(JSON.stringify(resolve));
 		
 		}).catch((e:any) => {console.log(e); res.status(500).end()});

@@ -84,9 +84,20 @@ function init(options) {
         exports.web.apibase = options.apibase;
     for (let index = 0; index < middlewares.length; index++) {
         const middleware = middlewares[index];
-        const callback = (middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: function (req, res, next) { webWrapper(req, res, next, middleware); } } : middleware;
-        middleware.namespace ? exports.app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, callback) : exports.app.use(callback.callback);
-        //function(req:any, res:any, next:Function) { invoke(middleware, collectParams(req, res, middleware)).then(() => next()).catch((e:any) => console.log(e)); });
+        const callback = (middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: function (req, res, next) {
+                (0, polyservice_1.invoke)(middleware, Object.assign(Object.assign({}, (collectParams(req, res, middleware))), { next: next }))
+                    .then((resolve) => {
+                    if (resolve && (typeof resolve !== "boolean" && ('blame' in resolve))) {
+                        return res.status(400).send(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
+                    }
+                })
+                    .catch((e) => {
+                    console.log(e);
+                    return res.status(500).end();
+                });
+            } } : middleware;
+        middleware.namespace ? exports.app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, callback)
+            : exports.app.use(callback.callback);
     }
     exports.app.use("/" + exports.web.apibase, exports.router);
     if (!options.httplistener)
@@ -165,28 +176,19 @@ function collectParams(req, res, method) {
             console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
         req["polyexpressErrorState"] = {};
         param[argument] = (req[requestmethod.where] || req["polyexpressErrorState"])[argument];
-        //const test = ensure(target, param[argument], argument);
-        //if(!test || (typeof test !== "boolean" && ('blame' in (test as ensurefail)))) return res.status(400).send(test.toString());
+        //	const test = ensure(target, param[argument], argument);
+        //	if(!test || (typeof test !== "boolean" && ('blame' in (test as ensurefail)))) return test;
     }
-    console.log(param);
     return param;
 }
 function webWrapper(req, res, next, middleware) {
-    (0, polyservice_1.invoke)(middleware, Object.assign(Object.assign({}, (collectParams(req, res, middleware))), { next: next })).then((resolve) => {
-        console.log(resolve);
-        if (resolve && (typeof resolve !== "boolean" && ('blame' in resolve))) {
-            console.log(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
-            return res.status(400).end();
-        }
-    });
 }
 function resolver(req, res, method) {
     return __awaiter(this, void 0, void 0, function* () {
         (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { context: res.locals.context }))
             .then((resolve) => {
             if (!resolve || (typeof resolve !== "boolean" && ('blame' in resolve))) {
-                console.log(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
-                return res.status(400).end();
+                return res.status(400).send(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
             }
             return res.status(resolve.code).send(JSON.stringify(resolve));
         }).catch((e) => { console.log(e); res.status(500).end(); });
