@@ -34,7 +34,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.web = exports.request = exports.requestMethod = exports.requestType = exports.router = exports.app = void 0;
 const express_1 = __importStar(require("express"));
-const polyservice_1 = require("../polyservice");
+const polyservice_1 = require("polyservice");
 exports.default = express_1.default;
 exports.app = (0, express_1.default)();
 exports.router = (0, express_1.Router)();
