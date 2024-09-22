@@ -1,5 +1,5 @@
 import express, { Router } from "express";
-import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions } from "polyservice";
+import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions } from "../polyservice";
 import { createServer as http } from "http";
 import { createServer as https } from "https";
 
@@ -88,7 +88,9 @@ function init(options:{ httplistener:any, httpoptions?:any, httpserverout?:any, 
 	}
 	app.use("/"+web.apibase,router);
 	if(!options.httplistener) throw Error("HttpListener option not passed, express listen failed to start");
-	options.httpserverout = options.httplistener(app, options.httpoptions);
+
+	//options.httplistener?.createServer(app, options.httpoptions);
+	options.httpserverout = options.httplistener?.createServer(app, options.httpoptions);
 }
 
 function bind(service:webService) {
@@ -106,7 +108,7 @@ function bind(service:webService) {
 				if(!middleware.arguments) return;
 
 				Object.keys(middleware?.arguments||{}).forEach((key:string) => {
-					// this is needed because of TS being shit but is already ensred by line 97
+					// this is needed because of TS limitations but is already ensred by line 107
 					if(!middleware.arguments) return;
 					const argument:webarg = middleware?.arguments[key];
 					if(argument.requestMethod === requestMethod.PARAM) urlargs.push({key, optional:(!argument.type || argument.type.includes("undefined") || argument.type.includes("null"))})
@@ -127,9 +129,10 @@ function bind(service:webService) {
 		for(let i = 0, len = ((urlargs?.find(({optional}) => optional)) ? 1 : 0) + 1; i < len; i++){
 			const url = buildURL(service, method.name, urlargs.slice(0,(!i && len > 1) ? -1 : undefined));
 			if(method.middleware)
-			method.middleware?.forEach((middleware:webMiddleware) => {
-				app.use(url, function(req:any, res:any, next:Function){ console.log(req.body,"AAAiBBB"); invoke(middleware, collectParams(req, res, middleware));});
-			})
+				method.middleware?.forEach((middleware:webMiddleware) => {
+					app.use("/"+web.apibase+url, function(req:any, res:any, next:Function) { resolveMiddleware(req, res, next, middleware); });
+						//invoke(middleware, collectParams(req, res, middleware)); });
+				})
 			router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
 		}
     	});
@@ -179,8 +182,13 @@ function collectParams(req:any, res:any, method:webMethod|webMiddleware){
 	return param;
 }
 
-function webWrapper(req:any, res:any, next:Function, middleware:webMiddleware){
-
+async function resolveMiddleware(req:any, res:any, next:Function, method:webMiddleware){
+	invoke(method, {...(collectParams(req,res,method)), next, context:res.locals.context})
+		//.then((resolve:result|ensurefail) => {
+		//if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
+		//return next()
+		//})
+		.catch((e:any) => {console.error(e); return res.status(500).end()})
 }
 
 async function resolver(req:any, res:any, method:webMethod) {   
@@ -190,5 +198,5 @@ async function resolver(req:any, res:any, method:webMethod) {
 			if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
 			return res.status((resolve as result).code).send(JSON.stringify(resolve));
 		
-		}).catch((e:any) => {console.log(e); res.status(500).end()});
+		}).catch((e:any) => {console.error(e); return res.status(500).end()});
 }
