@@ -72,23 +72,17 @@ function init(options:{ httplistener:any, httpoptions?:any, httpserverout?:any, 
 	if(options.apibase) web.apibase = options.apibase;
 	for (let index = 0; index < middlewares.length; index++) {
 		const middleware:middleware | any = middlewares[index];
-		const callback = (middleware?.arguments) ? {callback: function(req:any, res:any, next:Function) {
-			invoke(middleware, {...(collectParams(req, res, middleware)), next:next })
-			.then((resolve:ensurefail|any) => {
-			if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { 
-				return res.status(400).send(resolve?.toString());}
-			})
-			.catch((e:any) => {
-				console.log(e);
-				return res.status(500).end();
-			});
-		}} : middleware;
+		const callback = ((middleware?.arguments) ? {callback: resolve(middleware)} : middleware).callback;
+			
 		middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, callback)
-		       	: app.use(callback.callback);
+		       	: app.use(callback);
 	}
-	app.use("/"+web.apibase,router);
+
+	app.use("/"+web.apibase, router);
 	if(!options.httplistener) throw Error("HttpListener option not passed, express listen failed to start");
-	options.httpserverout = options.httplistener(app, options.httpoptions);
+
+	//options.httplistener?.createServer(app, options.httpoptions);
+	options.httpserverout = options.httplistener?.createServer(app, options.httpoptions);
 }
 
 function bind(service:webService) {
@@ -106,7 +100,7 @@ function bind(service:webService) {
 				if(!middleware.arguments) return;
 
 				Object.keys(middleware?.arguments||{}).forEach((key:string) => {
-					// this is needed because of TS being shit but is already ensred by line 97
+					// this is needed because of TS limitations but is already ensured by the check above
 					if(!middleware.arguments) return;
 					const argument:webarg = middleware?.arguments[key];
 					if(argument.requestMethod === requestMethod.PARAM) urlargs.push({key, optional:(!argument.type || argument.type.includes("undefined") || argument.type.includes("null"))})
@@ -127,10 +121,11 @@ function bind(service:webService) {
 		for(let i = 0, len = ((urlargs?.find(({optional}) => optional)) ? 1 : 0) + 1; i < len; i++){
 			const url = buildURL(service, method.name, urlargs.slice(0,(!i && len > 1) ? -1 : undefined));
 			if(method.middleware)
-			method.middleware?.forEach((middleware:webMiddleware) => {
-				app.use(url, function(req:any, res:any, next:Function){ console.log(req.body,"AAAiBBB"); invoke(middleware, collectParams(req, res, middleware));});
-			})
-			router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
+				method.middleware?.forEach((m:webMiddleware) => {
+					middleware({...m, namespace: url.slice(1) })
+				})
+			//router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
+			router[method?.request](url, resolve(method));
 		}
     	});
 }
@@ -179,16 +174,14 @@ function collectParams(req:any, res:any, method:webMethod|webMiddleware){
 	return param;
 }
 
-function webWrapper(req:any, res:any, next:Function, middleware:webMiddleware){
+type invoker = (req:any, res:any, next:Function) => void;
 
-}
-
-async function resolver(req:any, res:any, method:webMethod) {   
-
-	invoke(method, {...(collectParams(req,res,method)), context:res.locals.context})
-		.then((resolve:result|ensurefail)=>{
-			if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
-			return res.status((resolve as result).code).send(JSON.stringify(resolve));
-		
-		}).catch((e:any) => {console.log(e); res.status(500).end()});
+function resolve(method:webMethod|webMiddleware): invoker {   
+	return function (req:any, res:any, next:Function){
+		invoke(method, {...(collectParams(req,res,method)), next:next, context:res.locals.context})
+			.then((resolve:result|ensurefail)=>{
+				if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
+				if((method as webMethod)) return res.status((resolve as result).code).send(JSON.stringify(resolve));
+			}).catch((e:any) => {console.error(e); return res.status(500).end()});
+	}
 }

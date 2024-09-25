@@ -22,15 +22,6 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.web = exports.request = exports.requestMethod = exports.requestType = exports.router = exports.app = void 0;
 const express_1 = __importStar(require("express"));
@@ -52,7 +43,7 @@ var requestType;
     requestType["HEAD"] = "head";
     requestType["CONNECT"] = "connect";
     requestType["TRACE"] = "trace";
-})(requestType = exports.requestType || (exports.requestType = {}));
+})(requestType || (exports.requestType = requestType = {}));
 var requestMethod;
 (function (requestMethod) {
     requestMethod["JSON"] = "JSON";
@@ -62,7 +53,7 @@ var requestMethod;
     requestMethod["QUERY"] = "QUERY";
     requestMethod["PARAM"] = "PARAM";
     requestMethod["HEADER"] = "HEADER";
-})(requestMethod = exports.requestMethod || (exports.requestMethod = {}));
+})(requestMethod || (exports.requestMethod = requestMethod = {}));
 exports.request = {
     JSON: { where: "body", requires: ["jsonParser"] },
     XML: { where: "body", requires: [] },
@@ -80,29 +71,20 @@ exports.web = {
     apibase: API_BASE
 };
 function init(options) {
+    var _a;
     if (options.apibase)
         exports.web.apibase = options.apibase;
     for (let index = 0; index < middlewares.length; index++) {
         const middleware = middlewares[index];
-        const callback = (middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: function (req, res, next) {
-                (0, polyservice_1.invoke)(middleware, Object.assign(Object.assign({}, (collectParams(req, res, middleware))), { next: next }))
-                    .then((resolve) => {
-                    if (resolve && (typeof resolve !== "boolean" && ('blame' in resolve))) {
-                        return res.status(400).send(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
-                    }
-                })
-                    .catch((e) => {
-                    console.log(e);
-                    return res.status(500).end();
-                });
-            } } : middleware;
+        const callback = ((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: resolve(middleware) } : middleware).callback;
         middleware.namespace ? exports.app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, callback)
-            : exports.app.use(callback.callback);
+            : exports.app.use(callback);
     }
     exports.app.use("/" + exports.web.apibase, exports.router);
     if (!options.httplistener)
         throw Error("HttpListener option not passed, express listen failed to start");
-    options.httpserverout = options.httplistener(exports.app, options.httpoptions);
+    //options.httplistener?.createServer(app, options.httpoptions);
+    options.httpserverout = (_a = options.httplistener) === null || _a === void 0 ? void 0 : _a.createServer(exports.app, options.httpoptions);
 }
 function bind(service) {
     if (!("request" in service.method[0])) {
@@ -122,7 +104,7 @@ function bind(service) {
                 if (!middleware.arguments)
                     return;
                 Object.keys((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) || {}).forEach((key) => {
-                    // this is needed because of TS being shit but is already ensred by line 97
+                    // this is needed because of TS limitations but is already ensured by the check above
                     if (!middleware.arguments)
                         return;
                     const argument = middleware === null || middleware === void 0 ? void 0 : middleware.arguments[key];
@@ -144,10 +126,11 @@ function bind(service) {
         for (let i = 0, len = ((urlargs === null || urlargs === void 0 ? void 0 : urlargs.find(({ optional }) => optional)) ? 1 : 0) + 1; i < len; i++) {
             const url = buildURL(service, method.name, urlargs.slice(0, (!i && len > 1) ? -1 : undefined));
             if (method.middleware)
-                (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((middleware) => {
-                    exports.app.use(url, function (req, res, next) { console.log(req.body, "AAAiBBB"); (0, polyservice_1.invoke)(middleware, collectParams(req, res, middleware)); });
+                (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((m) => {
+                    middleware(Object.assign(Object.assign({}, m), { namespace: url.slice(1) }));
                 });
-            exports.router[method === null || method === void 0 ? void 0 : method.request](url, function (req, res) { resolver(req, res, method); });
+            //router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
+            exports.router[method === null || method === void 0 ? void 0 : method.request](url, resolve(method));
         }
     });
 }
@@ -172,6 +155,10 @@ function collectParams(req, res, method) {
         const target = method.arguments[argument];
         const requestmethod = exports.request[target.requestMethod];
         //ensure all middlewares are loaded that are required for some request types
+        //this can be done elsewhere so we dont have to run this with EVERY param check.
+        //we can scan all the registered objects on init and then run this loop to check
+        //ideally we would pass this off the the framework so the framework would have the abiliy
+        //to take in an object set of requires for all the service argument types
         if (requestmethod.requires.filter((m) => middlewareFunctions.every((item) => !m.includes(item))).length)
             console.log(`WARNING: Missing middleware(s) ${requestmethod.requires.join("and")} for request method type of ${target.requestMethod}`);
         req["polyexpressErrorState"] = {};
@@ -181,16 +168,15 @@ function collectParams(req, res, method) {
     }
     return param;
 }
-function webWrapper(req, res, next, middleware) {
-}
-function resolver(req, res, method) {
-    return __awaiter(this, void 0, void 0, function* () {
-        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { context: res.locals.context }))
+function resolve(method) {
+    return function (req, res, next) {
+        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { next: next, context: res.locals.context }))
             .then((resolve) => {
             if (!resolve || (typeof resolve !== "boolean" && ('blame' in resolve))) {
                 return res.status(400).send(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
             }
-            return res.status(resolve.code).send(JSON.stringify(resolve));
-        }).catch((e) => { console.log(e); res.status(500).end(); });
-    });
+            if (method)
+                return res.status(resolve.code).send(JSON.stringify(resolve));
+        }).catch((e) => { console.error(e); return res.status(500).end(); });
+    };
 }
