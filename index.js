@@ -22,19 +22,10 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.web = exports.request = exports.requestMethod = exports.requestType = exports.router = exports.app = void 0;
 const express_1 = __importStar(require("express"));
-const polyservice_1 = require("../polyservice");
+const polyservice_1 = require("polyservice");
 exports.default = express_1.default;
 exports.app = (0, express_1.default)();
 exports.router = (0, express_1.Router)();
@@ -85,20 +76,9 @@ function init(options) {
         exports.web.apibase = options.apibase;
     for (let index = 0; index < middlewares.length; index++) {
         const middleware = middlewares[index];
-        const callback = (middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: function (req, res, next) {
-                (0, polyservice_1.invoke)(middleware, Object.assign(Object.assign({}, (collectParams(req, res, middleware))), { next: next }))
-                    .then((resolve) => {
-                    if (resolve && (typeof resolve !== "boolean" && ('blame' in resolve))) {
-                        return res.status(400).send(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
-                    }
-                })
-                    .catch((e) => {
-                    console.log(e);
-                    return res.status(500).end();
-                });
-            } } : middleware;
+        const callback = ((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: resolve(middleware) } : middleware).callback;
         middleware.namespace ? exports.app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, callback)
-            : exports.app.use(callback.callback);
+            : exports.app.use(callback);
     }
     exports.app.use("/" + exports.web.apibase, exports.router);
     if (!options.httplistener)
@@ -124,7 +104,7 @@ function bind(service) {
                 if (!middleware.arguments)
                     return;
                 Object.keys((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) || {}).forEach((key) => {
-                    // this is needed because of TS limitations but is already ensred by line 107
+                    // this is needed because of TS limitations but is already ensured by the check above
                     if (!middleware.arguments)
                         return;
                     const argument = middleware === null || middleware === void 0 ? void 0 : middleware.arguments[key];
@@ -145,13 +125,12 @@ function bind(service) {
         });
         for (let i = 0, len = ((urlargs === null || urlargs === void 0 ? void 0 : urlargs.find(({ optional }) => optional)) ? 1 : 0) + 1; i < len; i++) {
             const url = buildURL(service, method.name, urlargs.slice(0, (!i && len > 1) ? -1 : undefined));
-            console.log(url);
             if (method.middleware)
-                (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((middleware) => {
-                    exports.app.use("/" + exports.web.apibase + url, function (req, res, next) { resolveMiddleware(req, res, next, middleware); });
-                    //invoke(middleware, collectParams(req, res, middleware)); });
+                (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((m) => {
+                    middleware(Object.assign(Object.assign({}, m), { namespace: url.slice(1) }));
                 });
-            exports.router[method === null || method === void 0 ? void 0 : method.request](url, function (req, res) { resolver(req, res, method); });
+            //router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
+            exports.router[method === null || method === void 0 ? void 0 : method.request](url, resolve(method));
         }
     });
 }
@@ -189,24 +168,15 @@ function collectParams(req, res, method) {
     }
     return param;
 }
-function resolveMiddleware(req, res, next, method) {
-    return __awaiter(this, void 0, void 0, function* () {
-        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { next, context: res.locals.context }))
-            //.then((resolve:result|ensurefail) => {
-            //if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
-            //return next()
-            //})
-            .catch((e) => { console.error(e); return res.status(500).end(); });
-    });
-}
-function resolver(req, res, method) {
-    return __awaiter(this, void 0, void 0, function* () {
-        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { context: res.locals.context }))
+function resolve(method) {
+    return function (req, res, next) {
+        (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { next: next, context: res.locals.context }))
             .then((resolve) => {
             if (!resolve || (typeof resolve !== "boolean" && ('blame' in resolve))) {
                 return res.status(400).send(resolve === null || resolve === void 0 ? void 0 : resolve.toString());
             }
-            return res.status(resolve.code).send(JSON.stringify(resolve));
+            if (method)
+                return res.status(resolve.code).send(JSON.stringify(resolve));
         }).catch((e) => { console.error(e); return res.status(500).end(); });
-    });
+    };
 }

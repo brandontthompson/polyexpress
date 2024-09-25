@@ -72,21 +72,13 @@ function init(options:{ httplistener:any, httpoptions?:any, httpserverout?:any, 
 	if(options.apibase) web.apibase = options.apibase;
 	for (let index = 0; index < middlewares.length; index++) {
 		const middleware:middleware | any = middlewares[index];
-		const callback = (middleware?.arguments) ? {callback: function(req:any, res:any, next:Function) {
-			invoke(middleware, {...(collectParams(req, res, middleware)), next:next })
-			.then((resolve:ensurefail|any) => {
-			if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { 
-				return res.status(400).send(resolve?.toString());}
-			})
-			.catch((e:any) => {
-				console.log(e);
-				return res.status(500).end();
-			});
-		}} : middleware;
+		const callback = ((middleware?.arguments) ? {callback: resolve(middleware)} : middleware).callback;
+			
 		middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, callback)
-		       	: app.use(callback.callback);
+		       	: app.use(callback);
 	}
-	app.use("/"+web.apibase,router);
+
+	app.use("/"+web.apibase, router);
 	if(!options.httplistener) throw Error("HttpListener option not passed, express listen failed to start");
 
 	//options.httplistener?.createServer(app, options.httpoptions);
@@ -108,7 +100,7 @@ function bind(service:webService) {
 				if(!middleware.arguments) return;
 
 				Object.keys(middleware?.arguments||{}).forEach((key:string) => {
-					// this is needed because of TS limitations but is already ensred by line 107
+					// this is needed because of TS limitations but is already ensured by the check above
 					if(!middleware.arguments) return;
 					const argument:webarg = middleware?.arguments[key];
 					if(argument.requestMethod === requestMethod.PARAM) urlargs.push({key, optional:(!argument.type || argument.type.includes("undefined") || argument.type.includes("null"))})
@@ -129,11 +121,11 @@ function bind(service:webService) {
 		for(let i = 0, len = ((urlargs?.find(({optional}) => optional)) ? 1 : 0) + 1; i < len; i++){
 			const url = buildURL(service, method.name, urlargs.slice(0,(!i && len > 1) ? -1 : undefined));
 			if(method.middleware)
-				method.middleware?.forEach((middleware:webMiddleware) => {
-					app.use("/"+web.apibase+url, function(req:any, res:any, next:Function) { resolveMiddleware(req, res, next, middleware); });
-						//invoke(middleware, collectParams(req, res, middleware)); });
+				method.middleware?.forEach((m:webMiddleware) => {
+					middleware({...m, namespace: url.slice(1) })
 				})
-			router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
+			//router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
+			router[method?.request](url, resolve(method));
 		}
     	});
 }
@@ -182,21 +174,14 @@ function collectParams(req:any, res:any, method:webMethod|webMiddleware){
 	return param;
 }
 
-async function resolveMiddleware(req:any, res:any, next:Function, method:webMiddleware){
-	invoke(method, {...(collectParams(req,res,method)), next, context:res.locals.context})
-		//.then((resolve:result|ensurefail) => {
-		//if(resolve && (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
-		//return next()
-		//})
-		.catch((e:any) => {console.error(e); return res.status(500).end()})
-}
+type invoker = (req:any, res:any, next:Function) => void;
 
-async function resolver(req:any, res:any, method:webMethod) {   
-
-	invoke(method, {...(collectParams(req,res,method)), context:res.locals.context})
-		.then((resolve:result|ensurefail)=>{
-			if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
-			return res.status((resolve as result).code).send(JSON.stringify(resolve));
-		
-		}).catch((e:any) => {console.error(e); return res.status(500).end()});
+function resolve(method:webMethod|webMiddleware): invoker {   
+	return function (req:any, res:any, next:Function){
+		invoke(method, {...(collectParams(req,res,method)), next:next, context:res.locals.context})
+			.then((resolve:result|ensurefail)=>{
+				if(!resolve || (typeof resolve !== "boolean" && ('blame' in (resolve as ensurefail)))) { return res.status(400).send(resolve?.toString());}
+				if((method as webMethod)) return res.status((resolve as result).code).send(JSON.stringify(resolve));
+			}).catch((e:any) => {console.error(e); return res.status(500).end()});
+	}
 }
