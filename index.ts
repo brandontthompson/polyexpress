@@ -1,5 +1,5 @@
 import express, { Router } from "express";
-import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions } from "polyservice";
+import { service, method, polyarg, invoke, ensurefail, ensure, controller, result, middleware, controllerOptions } from "../polyservice";
 import { createServer as http } from "http";
 import { createServer as https } from "https";
 
@@ -72,7 +72,7 @@ function init(options:{ httplistener:any, httpoptions?:any, httpserverout?:any, 
 	if(options.apibase) web.apibase = options.apibase;
 	for (let index = 0; index < middlewares.length; index++) {
 		const middleware:middleware | any = middlewares[index];
-		const callback = ((middleware?.arguments) ? {callback: resolve(middleware)} : middleware).callback;
+		const callback = ((middleware?.arguments) ? {callback: resolver(middleware)} : middleware).callback;
 			
 		middleware.namespace ? app.use("/"+((web.apibase) ? web.apibase+"/" : "")+middleware.namespace, callback)
 		       	: app.use(callback);
@@ -124,8 +124,7 @@ function bind(service:webService) {
 				method.middleware?.forEach((m:webMiddleware) => {
 					middleware({...m, namespace: url.slice(1) })
 				})
-			//router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
-			router[method?.request](url, resolve(method));
+			router[method?.request](url, resolver(method));
 		}
     	});
 }
@@ -176,7 +175,7 @@ function collectParams(req:any, res:any, method:webMethod|webMiddleware){
 
 type invoker = (req:any, res:any, next:Function) => void;
 
-function resolve(method:webMethod|webMiddleware): invoker {   
+function resolver(method:webMethod|webMiddleware): invoker {   
 	return function (req:any, res:any, next:Function){
 		invoke(method, {...(collectParams(req,res,method)), next:next, context:res.locals.context})
 			.then((resolve:result|ensurefail)=>{

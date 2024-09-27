@@ -25,7 +25,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.web = exports.request = exports.requestMethod = exports.requestType = exports.router = exports.app = void 0;
 const express_1 = __importStar(require("express"));
-const polyservice_1 = require("polyservice");
+const polyservice_1 = require("../polyservice");
 exports.default = express_1.default;
 exports.app = (0, express_1.default)();
 exports.router = (0, express_1.Router)();
@@ -76,7 +76,7 @@ function init(options) {
         exports.web.apibase = options.apibase;
     for (let index = 0; index < middlewares.length; index++) {
         const middleware = middlewares[index];
-        const callback = ((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: resolve(middleware) } : middleware).callback;
+        const callback = ((middleware === null || middleware === void 0 ? void 0 : middleware.arguments) ? { callback: resolver(middleware) } : middleware).callback;
         middleware.namespace ? exports.app.use("/" + ((exports.web.apibase) ? exports.web.apibase + "/" : "") + middleware.namespace, callback)
             : exports.app.use(callback);
     }
@@ -129,8 +129,7 @@ function bind(service) {
                 (_b = method.middleware) === null || _b === void 0 ? void 0 : _b.forEach((m) => {
                     middleware(Object.assign(Object.assign({}, m), { namespace: url.slice(1) }));
                 });
-            //router[method?.request](url, function(req:any, res:any){resolver(req, res, method)});
-            exports.router[method === null || method === void 0 ? void 0 : method.request](url, resolve(method));
+            exports.router[method === null || method === void 0 ? void 0 : method.request](url, resolver(method));
         }
     });
 }
@@ -168,7 +167,7 @@ function collectParams(req, res, method) {
     }
     return param;
 }
-function resolve(method) {
+function resolver(method) {
     return function (req, res, next) {
         (0, polyservice_1.invoke)(method, Object.assign(Object.assign({}, (collectParams(req, res, method))), { next: next, context: res.locals.context }))
             .then((resolve) => {
